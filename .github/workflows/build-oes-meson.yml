@@ -19,12 +19,11 @@ jobs:
           echo "downloading: $URL"
           curl -fsSL -o src.tar.gz "$URL"
           ls -la src.tar.gz
-          mkdir -p k && tar xzf src.tar.gz -C k
-          ls k/ | head
-          # locate the extracted root (rk_syno_kernel-with-oes)
-          SRC=$(find k -maxdepth 1 -mindepth 1 -type d | head -1)
+          mkdir -p src && tar xzf src.tar.gz -C src --strip-components=1
+          SRC="$PWD/src"
           echo "SRC=$SRC" >> "$GITHUB_ENV"
-          test -f "$SRC/Makefile" || { echo "no Makefile in $SRC"; exit 1; }
+          test -f "$SRC/Makefile" || { echo "no Makefile in $SRC"; ls -la "$SRC"; exit 1; }
+          head -3 "$SRC/Makefile"
 
       - name: Install dependencies
         run: |
@@ -33,7 +32,7 @@ jobs:
             build-essential bc bison flex libssl-dev libelf-dev dwarves \
             cpio xz-utils patch curl e2fsprogs device-tree-compiler \
             dosfstools mtools gzip vim-common \
-            libsodium-dev libmsgpack-dev g++ aarch64-linux-gnu-gcc
+            libsodium-dev libmsgpack-dev g++ gcc-aarch64-linux-gnu
 
       - name: Show OES changes present in the tree
         run: |
