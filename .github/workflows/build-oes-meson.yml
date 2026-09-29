@@ -19,11 +19,12 @@ jobs:
           echo "downloading: $URL"
           curl -fsSL -o src.tar.gz "$URL"
           ls -la src.tar.gz
-          mkdir -p src && tar xzf src.tar.gz -C src --strip-components=1
+          mkdir -p src && tar xzf src.tar.gz -C src
           SRC="$PWD/src"
           echo "SRC=$SRC" >> "$GITHUB_ENV"
           test -f "$SRC/Makefile" || { echo "no Makefile in $SRC"; ls -la "$SRC"; exit 1; }
           head -3 "$SRC/Makefile"
+          ls -la "$SRC/drivers/mtd/devices/oes_fake_spi.c"
 
       - name: Install dependencies
         run: |
