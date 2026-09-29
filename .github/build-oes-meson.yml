@@ -1,0 +1,87 @@
+name: Build OES Meson DSM Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      src_url:
+        description: 'source tree URL (default: release asset)'
+        required: false
+        default: 'https://github.com/EasongChung/oes-dsm-kernel/releases/download/oes-meson-src/rk_syno_kernel-with-oes.tar.gz'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch source tree
+        run: |
+          set -euo pipefail
+          URL="${{ github.event.inputs.src_url }}"
+          echo "downloading: $URL"
+          curl -fsSL -o src.tar.gz "$URL"
+          ls -la src.tar.gz
+          mkdir -p k && tar xzf src.tar.gz -C k
+          ls k/ | head
+          # locate the extracted root (rk_syno_kernel-with-oes)
+          SRC=$(find k -maxdepth 1 -mindepth 1 -type d | head -1)
+          echo "SRC=$SRC" >> "$GITHUB_ENV"
+          test -f "$SRC/Makefile" || { echo "no Makefile in $SRC"; exit 1; }
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential bc bison flex libssl-dev libelf-dev dwarves \
+            cpio xz-utils patch curl e2fsprogs device-tree-compiler \
+            dosfstools mtools gzip vim-common \
+            libsodium-dev libmsgpack-dev g++ aarch64-linux-gnu-gcc
+
+      - name: Show OES changes present in the tree
+        run: |
+          set -euo pipefail
+          ls -la "$SRC/drivers/mtd/devices/oes_fake_spi.c" \
+                "$SRC/arch/arm64/configs/meson_a311d_oes_dsm_defconfig" \
+                "$SRC/arch/arm64/boot/dts/amlogic/meson-g12b-a311d-oes-a.dts" \
+                || { echo "OES files missing from tree"; exit 1; }
+
+      - name: Build kernel + dtb
+        working-directory: ${{ env.SRC }}
+        run: |
+          set -euo pipefail
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make O=out meson_a311d_oes_dsm_defconfig
+          make O=out -j"$(nproc)" Image dtbs
+          ls -la out/arch/arm64/boot/Image
+          ls -la out/arch/arm64/boot/dts/amlogic/meson-g12b-a311d-oes-a.dtb
+
+      - name: Build modules
+        working-directory: ${{ env.SRC }}
+        run: |
+          set -euo pipefail
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          make -j"$(nproc)" modules
+          make INSTALL_MOD_PATH="$PWD/out/modules-install" modules_install
+          du -sh out/modules-install
+
+      - name: Collect artifacts
+        working-directory: ${{ env.SRC }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp out/arch/arm64/boot/Image artifacts/
+          cp out/arch/arm64/boot/dts/amlogic/meson-g12b-a311d-oes-a.dtb artifacts/
+          cp out/.config artifacts/kernel.config
+          tar -C out/modules-install -czf artifacts/modules.tar.gz .
+          grep -a -o "Linux version [ -~]*" artifacts/Image | head -1 | tee artifacts/BANNER.txt
+          sha256sum artifacts/* | tee artifacts/SHA256SUMS
+          echo "--- vermagic (must be 5.10.55+ SMP mod_unload aarch64) ---"
+          find out/modules-install -name "modules.builtin.modinfo" -o -name "modules.order" | head -2
+          grep -m2 "vermagic" out/modules-install/lib/modules/*/modules.* 2>/dev/null || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: oes-meson-kernel
+          path: ${{ env.SRC }}/artifacts/
+          if-no-files-found: error
