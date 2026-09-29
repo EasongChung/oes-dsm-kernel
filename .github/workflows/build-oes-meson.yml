@@ -6,7 +6,7 @@ on:
       src_url:
         description: 'source tree URL (default: release asset)'
         required: false
-        default: 'https://github.com/EasongChung/oes-dsm-kernel/releases/download/oes-meson-src/rk_syno_kernel-with-oes.tar.gz'
+        default: 'https://github.com/EasongChung/oes-dsm-kernel/releases/download/oes-meson-src/oes-src-v2.tar.gz'
 
 jobs:
   build:
